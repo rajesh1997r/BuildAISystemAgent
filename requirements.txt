@@ -1,0 +1,15 @@
+# ── Core framework ─────────────────────────────────────────────────────────
+crewai>=0.51.0,<2.0.0          # Multi-agent orchestration framework
+crewai-tools>=0.4.6            # CrewAI built-in tool helpers
+
+# ── LLM / API ──────────────────────────────────────────────────────────────
+openai>=1.12.0                 # OpenAI Python SDK
+
+# ── Configuration ──────────────────────────────────────────────────────────
+python-dotenv>=1.0.0           # Load .env file into environment
+
+# ── Optional: web search ───────────────────────────────────────────────────
+duckduckgo-search>=4.0.0       # Free web search (used by WebSearchTool)
+
+# ── Data / schema validation ───────────────────────────────────────────────
+pydantic>=2.0.0,<3.0.0         # Data validation for tool input schemas
