@@ -9,32 +9,104 @@ four dimensions:
   3. Engagement  – headings, questions, lists, emphasis
   4. Structure   – paragraphs, intro/conclusion signals
 
+As a CrewAI BaseTool, agents can call this directly to self-check
+their output before finalizing. main.py also calls analyze() directly
+for the post-pipeline quality report.
+
 Returns:
     score       : float  1–10
     suggestions : list[str]  actionable improvement tips
     breakdown   : dict   per-dimension scores
 """
 import re
-from typing import Dict, List, Tuple, Any
+from typing import Any, ClassVar, Dict, List, Tuple, Type
+
+try:
+    from crewai.tools import BaseTool
+except ImportError:
+    class BaseTool:  # type: ignore
+        name: str = ""
+        description: str = ""
+        def _run(self, *args, **kwargs): ...
+
+from pydantic import BaseModel, Field
 
 
-class ContentQualityAnalyzer:
+# ------------------------------------------------------------------ #
+# Input schema
+# ------------------------------------------------------------------ #
+
+class ContentQualityInput(BaseModel):
+    content: str = Field(description="The article text to evaluate for quality.")
+
+
+# ------------------------------------------------------------------ #
+# Tool / Analyzer
+# ------------------------------------------------------------------ #
+
+class ContentQualityAnalyzer(BaseTool):
     """
-    Heuristic content quality analyzer with full input validation.
+    Heuristic content quality analyzer — usable as a CrewAI tool AND
+    as a plain Python class.
 
-    Usage::
+    Agent usage (tool call)::
+        result_str = tool._run(content="<article text>")
 
+    Direct Python usage::
         analyzer = ContentQualityAnalyzer()
         result   = analyzer.analyze(my_article_text)
-        print(result["score"])          # e.g. 7.8
-        print(result["suggestions"])    # list of strings
+        print(result["score"])       # e.g. 7.8
+        print(result["suggestions"]) # list of strings
     """
 
-    # Tuning constants
-    MIN_WORDS_IDEAL = 400
-    MAX_AVG_SENTENCE_WORDS = 25
-    MAX_SENTENCE_WORDS = 35
-    LONG_SENTENCE_THRESHOLD = 0.30   # fraction of sentences that may be long
+    # CrewAI / Pydantic fields
+    name: str = "Content Quality Analyzer"
+    description: str = (
+        "Evaluate the quality of written content across four dimensions: "
+        "length, readability, engagement, and structure. "
+        "Returns a score from 1–10 with specific, actionable improvement suggestions. "
+        "Use this tool to self-check your output before finalizing."
+    )
+    args_schema: Type[BaseModel] = ContentQualityInput
+
+    # Tuning constants — ClassVar keeps Pydantic from treating them as fields
+    MIN_WORDS_IDEAL: ClassVar[int] = 400
+    MAX_AVG_SENTENCE_WORDS: ClassVar[int] = 25
+    MAX_SENTENCE_WORDS: ClassVar[int] = 35
+    LONG_SENTENCE_THRESHOLD: ClassVar[float] = 0.30
+
+    # ------------------------------------------------------------------ #
+    # BaseTool entry point (called when an agent uses this tool)
+    # ------------------------------------------------------------------ #
+
+    def _run(self, content: str) -> str:
+        """Run quality analysis and return a formatted string for the agent."""
+        result = self.analyze(content)
+
+        if result["score"] == 0:
+            return f"Quality check failed: {result['suggestions'][0]}"
+
+        lines = [
+            f"Quality Score: {result['score']:.1f} / 10",
+            "",
+            "Breakdown:",
+        ]
+        for dim, val in result.get("breakdown", {}).items():
+            bar = "█" * int(val) + "░" * (10 - int(val))
+            lines.append(f"  {dim.capitalize():15} {bar}  {val:.1f}")
+
+        if result["suggestions"]:
+            lines += ["", "Suggestions:"]
+            for tip in result["suggestions"][:5]:
+                lines.append(f"  • {tip}")
+        else:
+            lines.append("\nContent quality looks great!")
+
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------ #
+    # Public Python API (used by main.py and tests)
+    # ------------------------------------------------------------------ #
 
     def analyze(self, content: Any) -> Dict:
         """
@@ -174,7 +246,6 @@ class ContentQualityAnalyzer:
         suggestions: List[str] = []
         score = 5.0
 
-        # Questions engage readers
         question_count = content.count("?")
         if question_count >= 2:
             score += 1.5
@@ -185,7 +256,6 @@ class ContentQualityAnalyzer:
                 "Add 1–2 rhetorical or thought-provoking questions to engage readers."
             )
 
-        # Markdown headings improve scannability
         heading_count = len(re.findall(r"^#{1,6}\s", content, re.MULTILINE))
         if heading_count >= 3:
             score += 2.0
@@ -196,7 +266,6 @@ class ContentQualityAnalyzer:
                 "Add section headings (## Heading) to break up the text and guide readers."
             )
 
-        # Bullet / numbered lists
         has_list = bool(re.search(r"^[\-\*\•\d+\.]\s", content, re.MULTILINE))
         if has_list:
             score += 1.0
@@ -205,7 +274,6 @@ class ContentQualityAnalyzer:
                 "Include bullet points or a numbered list to highlight key takeaways."
             )
 
-        # Bold emphasis
         has_bold = bool(re.search(r"\*\*[^*]+\*\*", content))
         if has_bold:
             score += 0.5
@@ -233,7 +301,6 @@ class ContentQualityAnalyzer:
                 "Structure content into multiple sections with clear paragraph breaks."
             )
 
-        # Conclusion detection
         conclusion_kw = [
             "conclusion", "in summary", "to summarize", "in closing",
             "finally,", "to conclude", "wrap up", "in short",
@@ -245,7 +312,6 @@ class ContentQualityAnalyzer:
                 "Add a clear conclusion or 'Key Takeaways' section to round off the article."
             )
 
-        # Introduction detection
         intro_kw = [
             "introduction", "in this article", "this post", "we will explore",
             "this guide", "overview", "let's dive",

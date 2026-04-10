@@ -17,6 +17,7 @@ Tools used:
 from crewai import Agent
 from tools.text_processing_tool import TextProcessingTool
 from tools.output_formatter_tool import OutputFormatterTool
+from tools.content_quality_analyzer import ContentQualityAnalyzer
 
 
 def create_content_editor_agent(llm=None) -> Agent:
@@ -29,7 +30,7 @@ def create_content_editor_agent(llm=None) -> Agent:
     Returns:
         Configured CrewAI Agent instance.
     """
-    tools = [TextProcessingTool(), OutputFormatterTool()]
+    tools = [TextProcessingTool(), OutputFormatterTool(), ContentQualityAnalyzer()]
 
     kwargs = dict(
         role="Expert Content Editor",

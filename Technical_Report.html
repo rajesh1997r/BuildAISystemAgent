@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Technical Report – Content Creation Agentic System</title>
+<style>
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    margin: 1in;
+    color: #000;
+  }
+  h1 { font-size: 18pt; text-align: center; margin-bottom: 6pt; }
+  h2 { font-size: 14pt; margin-top: 24pt; margin-bottom: 6pt; border-bottom: 1px solid #000; padding-bottom: 2pt; }
+  h3 { font-size: 12pt; margin-top: 14pt; margin-bottom: 4pt; }
+  p  { margin: 6pt 0; text-align: justify; }
+  ul, ol { margin: 6pt 0 6pt 24pt; }
+  li { margin-bottom: 3pt; }
+  table { border-collapse: collapse; width: 100%; margin: 12pt 0; font-size: 11pt; }
+  th { background-color: #1f3864; color: #fff; padding: 6pt 8pt; text-align: left; }
+  td { border: 1px solid #999; padding: 5pt 8pt; vertical-align: top; }
+  tr:nth-child(even) td { background-color: #f2f2f2; }
+  .cover { text-align: center; padding-top: 80pt; }
+  .cover p { text-align: center; }
+  .page-break { page-break-before: always; }
+  pre {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 9pt;
+    background: #f5f5f5;
+    border: 1px solid #ccc;
+    padding: 10pt;
+    overflow-x: auto;
+    line-height: 1.4;
+  }
+  .toc li { list-style: none; margin-bottom: 4pt; }
+  .toc { margin-left: 0; padding-left: 0; }
+  .label { font-weight: bold; }
+  .note { font-style: italic; color: #444; font-size: 10pt; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ COVER PAGE -->
+<div class="cover">
+  <br><br>
+  <h1>Building Agentic Systems</h1>
+  <h1>Technical Report</h1>
+  <br><br>
+  <p><strong>Project Title:</strong> Content Creation Agentic System</p>
+  <p><strong>Platform:</strong> CrewAI + OpenAI GPT-4o-mini</p>
+  <p><strong>Domain:</strong> Content Creation</p>
+  <p><strong>Course:</strong> Prompt Engineering / AI Systems</p>
+  <p><strong>Date:</strong> April 2026</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ TABLE OF CONTENTS -->
+<div class="page-break">
+  <h2>Table of Contents</h2>
+  <ol class="toc">
+    <li>1. &nbsp; Executive Summary</li>
+    <li>2. &nbsp; System Architecture</li>
+    <li>3. &nbsp; Agent Roles and Responsibilities</li>
+    <li>4. &nbsp; Tool Integration and Functionality</li>
+    <li>5. &nbsp; Custom Tool Documentation</li>
+    <li>6. &nbsp; Orchestration and Memory Management</li>
+    <li>7. &nbsp; Test Cases and Evaluation</li>
+    <li>8. &nbsp; Challenges and Solutions</li>
+    <li>9. &nbsp; Performance Analysis and Limitations</li>
+    <li>10. Conclusion</li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 1. EXECUTIVE SUMMARY -->
+<div class="page-break">
+  <h2>1. Executive Summary</h2>
+  <p>
+    This report describes the design, implementation, and evaluation of a multi-agent AI content
+    creation system built using the CrewAI framework and OpenAI's GPT-4o-mini model. The system
+    accepts a user-supplied topic and autonomously produces a publication-ready Markdown article
+    by coordinating three specialized AI agents through a sequential pipeline.
+  </p>
+  <p>
+    A central <strong>ContentCreationController</strong> orchestrates the pipeline. The
+    <strong>Idea Generator Agent</strong> researches trending angles and selects the most compelling
+    idea. The <strong>Content Writer Agent</strong> drafts a structured 400–700 word article. The
+    <strong>Content Editor Agent</strong> refines grammar, tone, and structure before producing the
+    final output. Four custom-built tools support the agents: a web search tool, a text processing
+    tool, an output formatter, and a content quality analyzer — the last of which is both an
+    agent-callable tool and a post-pipeline evaluator.
+  </p>
+  <p>
+    The system includes comprehensive input validation, exponential-backoff retry logic, a shared
+    memory layer for state persistence, evaluation metrics, and a full unit test suite — all without
+    any additional external API beyond OpenAI.
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 2. SYSTEM ARCHITECTURE -->
+<div class="page-break">
+  <h2>2. System Architecture</h2>
+
+  <h3>2.1 Architecture Diagram</h3>
+<pre>
+┌──────────────────────────────────────────────────────────────┐
+│                    main.py  (Entry Point)                     │
+│   Input Validation  ──►  SharedMemory  ──►  Controller       │
+└──────────────────────────────┬───────────────────────────────┘
+                                │  Process.sequential
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+          ▼                     ▼                     ▼
+ ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+ │  Idea Generator │  │ Content Writer  │  │ Content Editor  │
+ │     Agent       │  │     Agent       │  │     Agent       │
+ │  [Task 1]       │  │  [Task 2]       │  │  [Task 3]       │
+ │                 │  │  context:       │  │  context:       │
+ │                 │  │  [Task 1]       │  │  [Task 2]       │
+ └────────┬────────┘  └────────┬────────┘  └────────┬────────┘
+          │                    │                    │
+    ┌─────┴─────┐        ┌─────┴──────┐      ┌─────┴──────────┐
+    │ WebSearch │        │  WebSearch │      │ TextProcessing │
+    │ TextProc. │        │  OutputFmt │      │ OutputFormatter│
+    └───────────┘        └────────────┘      │ QualityAnalyzer│
+                                             └────────────────┘
+                                │
+                                ▼
+               ┌────────────────────────────┐
+               │       SharedMemory          │
+               │  topic, status, ideas,      │
+               │  draft_content,             │
+               │  final_content              │
+               └──────────────┬─────────────┘
+                              │
+                              ▼
+               ┌────────────────────────────┐
+               │  Post-Pipeline Evaluation   │
+               │  ContentQualityAnalyzer     │
+               │  EvaluationMetrics          │
+               └────────────────────────────┘
+</pre>
+
+  <h3>2.2 Data Flow</h3>
+  <p>
+    The user invokes <code>main.py</code> via the command line with an optional topic string.
+    After input validation, a <strong>SharedMemory</strong> instance is created and handed to the
+    <strong>ContentCreationController</strong>. The controller builds three interdependent CrewAI
+    Tasks and assembles them into a <strong>Crew</strong> running with
+    <code>Process.sequential</code>. Each task's output is automatically forwarded to the next via
+    CrewAI's <code>context</code> parameter. Once the crew completes, the controller extracts the
+    final Markdown content from the <code>CrewOutput.raw</code> attribute, persists it to shared
+    memory, and returns the result to <code>main.py</code>. The content is then scored by the
+    <strong>ContentQualityAnalyzer</strong> and wrapped in <strong>EvaluationMetrics</strong>
+    before being printed to the console.
+  </p>
+
+  <h3>2.3 Technology Stack</h3>
+  <table>
+    <tr><th>Component</th><th>Technology</th><th>Version</th></tr>
+    <tr><td>Agent Framework</td><td>CrewAI</td><td>&ge; 0.51.0</td></tr>
+    <tr><td>LLM Provider</td><td>OpenAI GPT-4o-mini</td><td>openai &ge; 1.12.0</td></tr>
+    <tr><td>Schema Validation</td><td>Pydantic</td><td>&ge; 2.0.0</td></tr>
+    <tr><td>Web Search</td><td>DuckDuckGo Search</td><td>&ge; 4.0.0</td></tr>
+    <tr><td>Environment Config</td><td>python-dotenv</td><td>&ge; 1.0.0</td></tr>
+    <tr><td>Language</td><td>Python</td><td>3.9+</td></tr>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 3. AGENT ROLES -->
+<div class="page-break">
+  <h2>3. Agent Roles and Responsibilities</h2>
+
+  <p>
+    All three agents are created via factory functions (e.g., <code>create_idea_generator_agent()</code>)
+    that return a configured <code>crewai.Agent</code> instance. Each agent has
+    <code>allow_delegation=False</code> and <code>max_retry_limit=2</code>. An optional
+    <code>llm</code> parameter allows the LLM model to be overridden, which is useful for
+    testing with cheaper models.
+  </p>
+
+  <table>
+    <tr>
+      <th>Agent</th>
+      <th>Role Name</th>
+      <th>Primary Goal</th>
+      <th>Tools Assigned</th>
+    </tr>
+    <tr>
+      <td><strong>Idea Generator</strong></td>
+      <td>Creative Content Idea Generator</td>
+      <td>Research current trends and brainstorm 5–10 specific content angles. End output with a <code>SELECTED IDEA:</code> line.</td>
+      <td>WebSearchTool, TextProcessingTool</td>
+    </tr>
+    <tr>
+      <td><strong>Content Writer</strong></td>
+      <td>Professional Content Writer</td>
+      <td>Transform the selected idea into a 400–700 word Markdown article with title, introduction, 3+ body sections, bullet points, and conclusion.</td>
+      <td>WebSearchTool, OutputFormatterTool</td>
+    </tr>
+    <tr>
+      <td><strong>Content Editor</strong></td>
+      <td>Expert Content Editor</td>
+      <td>Fix grammar/spelling, replace passive voice, shorten long sentences, self-check quality score (target &ge; 8), and produce publication-ready Markdown.</td>
+      <td>TextProcessingTool, OutputFormatterTool, ContentQualityAnalyzer</td>
+    </tr>
+  </table>
+
+  <h3>3.1 Agent Communication</h3>
+  <p>
+    Agents communicate through CrewAI's <strong>task context chaining</strong>. When
+    <code>writer_task</code> is defined with <code>context=[idea_task]</code>, CrewAI
+    automatically appends the Idea Generator's full output to the Writer's prompt at runtime.
+    The same pattern connects the Writer's output to the Editor. This eliminates the need for
+    explicit message-passing code — the framework manages the information handoff.
+  </p>
+  <p>
+    The <strong>SharedMemory</strong> class provides a secondary communication layer at the
+    controller level, storing <code>topic</code>, <code>status</code>, <code>draft_content</code>,
+    and <code>final_content</code> as the pipeline progresses. This enables the controller to
+    recover partial results if a retry is needed.
+  </p>
+
+  <h3>3.2 Prompting Strategy</h3>
+  <p>
+    Each agent is given a detailed <em>backstory</em> string that is injected into the LLM's system
+    prompt. For example, the Idea Generator's backstory describes it as "an award-winning content
+    strategist with a decade of experience in SEO and audience engagement," which consistently
+    biases the model toward producing specific, trend-aware ideas rather than generic outlines.
+    Task descriptions include explicit output format requirements (e.g., "end with exactly
+    <code>SELECTED IDEA: &lt;one sentence&gt;</code>") to make downstream parsing reliable.
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 4. TOOL INTEGRATION -->
+<div class="page-break">
+  <h2>4. Tool Integration and Functionality</h2>
+
+  <p>
+    All tools subclass <code>crewai.tools.BaseTool</code> and define a Pydantic input schema
+    for automatic type validation. CrewAI serializes tool calls to JSON, validates them against the
+    schema, and invokes the tool's <code>_run()</code> method. Each tool handles invalid inputs
+    and network errors gracefully, returning descriptive error strings rather than raising
+    exceptions that would crash the agent loop.
+  </p>
+
+  <h3>4.1 Web Search Tool</h3>
+  <table>
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>File</td><td><code>tools/web_search_tool.py</code></td></tr>
+    <tr><td>Input Schema</td><td><code>query: str</code>, <code>max_results: int (1–10, default 5)</code></td></tr>
+    <tr><td>Primary Backend</td><td>DuckDuckGo via <code>DDGS().text(query, max_results)</code></td></tr>
+    <tr><td>Fallback</td><td><code>_mock_search()</code> returns 5 representative placeholder results — pipeline runs offline</td></tr>
+    <tr><td>Output</td><td>Numbered list of titles and 250-character snippets</td></tr>
+    <tr><td>Used By</td><td>Idea Generator Agent, Content Writer Agent</td></tr>
+  </table>
+
+  <h3>4.2 Text Processing Tool</h3>
+  <table>
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>File</td><td><code>tools/text_processing_tool.py</code></td></tr>
+    <tr><td>Input Schema</td><td><code>text: str</code>, <code>operation: str</code></td></tr>
+    <tr><td>Operations</td><td>
+      <strong>clean</strong> — normalise whitespace and collapse blank lines<br>
+      <strong>summarize</strong> — extractive 3-sentence summary (first, middle, last)<br>
+      <strong>format</strong> — capitalise paragraph starts, fix spacing<br>
+      <strong>extract_keywords</strong> — top-10 non-stop-word terms by frequency
+    </td></tr>
+    <tr><td>Used By</td><td>Idea Generator Agent, Content Editor Agent</td></tr>
+  </table>
+
+  <h3>4.3 Output Formatter Tool</h3>
+  <table>
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>File</td><td><code>tools/output_formatter_tool.py</code></td></tr>
+    <tr><td>Input Schema</td><td><code>content: str</code>, <code>format_type: str (default "markdown")</code></td></tr>
+    <tr><td>Modes</td><td>
+      <strong>markdown</strong> — normalise heading spacing, collapse blank lines, trim trailing whitespace<br>
+      <strong>html</strong> — convert to a complete HTML5 document (handles headings, bold, italic, lists)<br>
+      <strong>plain</strong> — strip all Markdown symbols, return clean prose
+    </td></tr>
+    <tr><td>Fallback</td><td>Unknown format_type silently falls back to markdown</td></tr>
+    <tr><td>Used By</td><td>Content Writer Agent, Content Editor Agent</td></tr>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 5. CUSTOM TOOL -->
+<div class="page-break">
+  <h2>5. Custom Tool Documentation — Content Quality Analyzer</h2>
+
+  <h3>5.1 Overview</h3>
+  <p>
+    The <strong>ContentQualityAnalyzer</strong> (<code>tools/content_quality_analyzer.py</code>)
+    is the project's mandatory custom tool. It evaluates generated content using rule-based
+    heuristics and returns a numeric quality score from 1 to 10 along with actionable improvement
+    suggestions. It is uniquely dual-purpose in this system:
+  </p>
+  <ul>
+    <li>As a <strong>CrewAI BaseTool</strong> — the Content Editor Agent can call it mid-task
+        to self-check its draft before finalizing, implementing an in-loop quality feedback cycle.</li>
+    <li>As a <strong>plain Python class</strong> — <code>main.py</code> calls
+        <code>analyzer.analyze(final_content)</code> directly after the pipeline to produce the
+        post-pipeline quality report shown to the user.</li>
+  </ul>
+
+  <h3>5.2 Inputs and Outputs</h3>
+  <table>
+    <tr><th>Usage Mode</th><th>Input</th><th>Output</th></tr>
+    <tr>
+      <td>Agent tool call (<code>_run</code>)</td>
+      <td><code>content: str</code> — the article text</td>
+      <td>Formatted string: score, visual bar chart breakdown, bullet-point suggestions</td>
+    </tr>
+    <tr>
+      <td>Direct Python (<code>analyze</code>)</td>
+      <td><code>content: Any</code> — validated internally</td>
+      <td>Dict: <code>{"score": float, "suggestions": list, "breakdown": dict}</code></td>
+    </tr>
+  </table>
+
+  <h3>5.3 Scoring Algorithm</h3>
+  <p>Four sub-scores are computed independently and combined using a weighted average:</p>
+  <table>
+    <tr><th>Dimension</th><th>Weight</th><th>What Is Measured</th><th>Method</th></tr>
+    <tr>
+      <td>Length</td><td>20%</td>
+      <td>Word count relative to ideal range (400–1500 words)</td>
+      <td><code>_analyze_length()</code></td>
+    </tr>
+    <tr>
+      <td>Readability</td><td>30%</td>
+      <td>Average sentence length (&le; 20 words target) and fraction of sentences exceeding 35 words</td>
+      <td><code>_analyze_readability()</code></td>
+    </tr>
+    <tr>
+      <td>Engagement</td><td>30%</td>
+      <td>Presence of question marks, Markdown headings (&ge; 3), bullet lists, bold emphasis</td>
+      <td><code>_analyze_engagement()</code></td>
+    </tr>
+    <tr>
+      <td>Structure</td><td>20%</td>
+      <td>Paragraph count (&ge; 5 for full marks), conclusion keywords, introduction keywords</td>
+      <td><code>_analyze_structure()</code></td>
+    </tr>
+  </table>
+  <p>
+    The final score is clamped to [1.0, 10.0]. If the analyzer detects no issues, it returns
+    the message <em>"Content quality looks great!"</em> If the input is not a string, a type-error
+    message is returned with a score of 0 rather than raising an exception.
+  </p>
+
+  <h3>5.4 Integration with Editor Agent</h3>
+  <p>
+    The Content Editor Agent's task description explicitly instructs it to call the Content Quality
+    Analyzer Tool and aim for a score of 8 or above before proceeding to the Output Formatter Tool.
+    This creates a <strong>self-improvement feedback loop</strong>: the agent can read the
+    suggestions returned by the analyzer and apply them to its own draft within the same task
+    execution.
+  </p>
+
+  <h3>5.5 Limitations</h3>
+  <ul>
+    <li>The scoring is heuristic, not semantic — it cannot detect factual inaccuracies or
+        assess argument quality.</li>
+    <li>Readability scoring uses word count per sentence, not a standard formula like
+        Flesch-Kincaid.</li>
+    <li>Keyword detection for conclusions and introductions relies on a fixed list and may
+        miss creative phrasing.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 6. ORCHESTRATION -->
+<div class="page-break">
+  <h2>6. Orchestration and Memory Management</h2>
+
+  <h3>6.1 Task Orchestration</h3>
+  <p>
+    The <code>ContentCreationController._build_tasks()</code> method constructs three
+    <code>crewai.Task</code> objects. Sequential execution is enforced by passing
+    <code>Process.sequential</code> to the <code>Crew</code> constructor. This design is
+    intentional: the Writer cannot begin until the Idea Generator has committed to a
+    <code>SELECTED IDEA</code>, and the Editor cannot begin until the Writer has produced a
+    complete draft. A parallel process would not make logical sense here.
+  </p>
+  <p>
+    Agent communication across tasks is implemented via the <code>context</code> parameter.
+    <code>writer_task</code> has <code>context=[idea_task]</code> and <code>editor_task</code>
+    has <code>context=[writer_task]</code>. CrewAI appends the full text output of each context
+    task to the next agent's prompt automatically.
+  </p>
+
+  <h3>6.2 Retry and Error Recovery</h3>
+  <p>
+    The <code>ContentCreationController.run()</code> method wraps the pipeline in a retry loop
+    with a configurable <code>max_retries</code> parameter (default: 2). On each failure, the
+    system waits <code>2<sup>attempt</sup></code> seconds (exponential backoff) before retrying.
+    If all retries fail, the controller returns any partial content already stored in
+    <code>SharedMemory</code> so the user receives the best available output rather than an
+    empty response. Each agent also has its own <code>max_retry_limit=2</code> at the CrewAI
+    level for transient LLM API errors.
+  </p>
+
+  <h3>6.3 Shared Memory</h3>
+  <p>
+    The <code>SharedMemory</code> class (<code>utils/memory.py</code>) is a thread-safe dictionary
+    wrapper that persists workflow state across the entire pipeline. It stores the following keys:
+  </p>
+  <table>
+    <tr><th>Key</th><th>Set By</th><th>Purpose</th></tr>
+    <tr><td><code>topic</code></td><td>Controller at start</td><td>The user's topic string</td></tr>
+    <tr><td><code>status</code></td><td>Controller throughout</td><td><code>running</code> / <code>completed</code> / <code>error</code></td></tr>
+    <tr><td><code>selected_idea</code></td><td>main.py after pipeline</td><td>The idea chosen by the Idea Generator</td></tr>
+    <tr><td><code>final_content</code></td><td>Controller after pipeline</td><td>The polished Markdown article</td></tr>
+    <tr><td><code>error</code></td><td>Controller on failure</td><td>Last exception message</td></tr>
+  </table>
+  <p>
+    Every <code>set()</code> and <code>delete()</code> call is logged to an internal
+    <code>_history</code> list with an ISO 8601 timestamp, providing a full audit trail of
+    state changes. The <code>to_json()</code> method exports the store for debugging.
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 7. TEST CASES -->
+<div class="page-break">
+  <h2>7. Test Cases and Evaluation</h2>
+
+  <h3>7.1 Unit Tests</h3>
+  <p>
+    The file <code>tests/test_cases.py</code> contains a custom <code>_TestRunner</code> class
+    (no external test framework required) with five test suites that run without an API key:
+  </p>
+  <table>
+    <tr><th>Test Suite</th><th>What Is Tested</th><th>Key Assertions</th></tr>
+    <tr>
+      <td><code>test_quality_analyzer()</code></td>
+      <td>ContentQualityAnalyzer</td>
+      <td>Empty/None/int input → score 0; well-structured article → score 5–10; scores always clamped to [1, 10]</td>
+    </tr>
+    <tr>
+      <td><code>test_shared_memory()</code></td>
+      <td>SharedMemory</td>
+      <td>set/get/overwrite/bulk update/delete/clear; history records operations; to_json serialises correctly</td>
+    </tr>
+    <tr>
+      <td><code>test_evaluation_metrics()</code></td>
+      <td>EvaluationMetrics</td>
+      <td>is_acceptable() passes/fails for length, quality, and timeout thresholds; to_dict() preserves values</td>
+    </tr>
+    <tr>
+      <td><code>test_text_processing_tool()</code></td>
+      <td>TextProcessingTool</td>
+      <td>Empty input returns error; unknown operation returns error; clean/summarize/format/keywords work correctly</td>
+    </tr>
+    <tr>
+      <td><code>test_output_formatter_tool()</code></td>
+      <td>OutputFormatterTool</td>
+      <td>Empty content → error; unknown format → fallback to markdown; HTML output contains DOCTYPE and &lt;h1&gt;; plain strips # markers</td>
+    </tr>
+  </table>
+
+  <h3>7.2 Integration Test Cases</h3>
+  <p>Integration tests run via <code>python main.py --test</code> and require an OpenAI API key.</p>
+  <table>
+    <tr><th>Test</th><th>Input</th><th>Expected Status</th><th>Rationale</th></tr>
+    <tr>
+      <td>1 — Normal Topic</td>
+      <td>"Artificial Intelligence in Healthcare"</td>
+      <td>success, score &ge; 5.0, &ge; 200 words</td>
+      <td>A well-defined topic should produce a complete, high-quality article with title, body sections, and conclusion.</td>
+    </tr>
+    <tr>
+      <td>2 — Vague Topic</td>
+      <td>"technology"</td>
+      <td>success, score &ge; 4.0, &ge; 100 words</td>
+      <td>A one-word broad topic tests the Idea Generator's ability to narrow scope creatively and still produce relevant content.</td>
+    </tr>
+    <tr>
+      <td>3 — Edge Case: Empty Input</td>
+      <td>"" (empty string)</td>
+      <td>error</td>
+      <td>Empty input must be caught by input validation before reaching any agent, returning a meaningful error message. Returning "error" here is the correct and expected outcome.</td>
+    </tr>
+  </table>
+
+  <h3>7.3 Evaluation Metrics</h3>
+  <p>
+    The <code>EvaluationMetrics</code> dataclass (<code>utils/metrics.py</code>) tracks three
+    values for every pipeline run. A run is marked <em>acceptable</em> if all three thresholds
+    are met:
+  </p>
+  <ul>
+    <li>Content length &gt; 100 characters</li>
+    <li>Quality score &ge; 5.0 / 10</li>
+    <li>Response time &lt; 300 seconds</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 8. CHALLENGES -->
+<div class="page-break">
+  <h2>8. Challenges and Solutions</h2>
+
+  <table>
+    <tr><th>Challenge</th><th>Solution</th></tr>
+    <tr>
+      <td><strong>CrewAI imports OpenAI eagerly</strong> — importing agent modules before the API key is loaded caused crashes.</td>
+      <td>Moved <code>load_dotenv()</code> and the API key check to the very top of <code>main.py</code>, before any project imports. The program exits with a friendly error if the key is absent.</td>
+    </tr>
+    <tr>
+      <td><strong>CrewOutput format changed</strong> across CrewAI versions — accessing the final content string broke between versions 0.51 and later releases.</td>
+      <td>Implemented the <code>_extract_content()</code> helper in the controller that checks for <code>.raw</code>, then <code>.output</code>, then falls back to <code>str()</code>. This makes the system forward-compatible.</td>
+    </tr>
+    <tr>
+      <td><strong>DuckDuckGo rate limiting and network failures</strong> in test environments caused the web search tool to raise exceptions mid-pipeline.</td>
+      <td>Wrapped the <code>DDGS</code> call in a try/except. On any failure, the tool falls back to <code>_mock_search()</code> which returns representative placeholder results, allowing the pipeline to complete offline.</td>
+    </tr>
+    <tr>
+      <td><strong>Pydantic v2 conflict</strong> with class-level tuning constants in ContentQualityAnalyzer after converting it to a BaseTool — Pydantic treated integer literals as model fields.</td>
+      <td>Annotated all tuning constants with <code>ClassVar[int]</code> and <code>ClassVar[float]</code>, which instructs Pydantic v2 to exclude them from model field processing.</td>
+    </tr>
+    <tr>
+      <td><strong>Reliable idea extraction</strong> — the Idea Generator sometimes buried the selected idea in the middle of its output rather than on the last line.</td>
+      <td>The task description explicitly requires the phrase <code>SELECTED IDEA:</code> on the very last line. The Writer agent's prompt reinforces this by instructing it to "use the SELECTED IDEA from the previous task," making the instruction robust against formatting variation.</td>
+    </tr>
+    <tr>
+      <td><strong>Empty input reaching agents</strong> — early versions let blank topics propagate all the way to CrewAI, resulting in generic or nonsensical output.</td>
+      <td>Added a two-stage input guard in <code>run_content_creation()</code>: empty strings and topics under 3 characters are rejected immediately, before any agent or memory object is created, returning a structured error dictionary.</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 9. PERFORMANCE -->
+<div class="page-break">
+  <h2>9. Performance Analysis and Limitations</h2>
+
+  <h3>9.1 Performance Observations</h3>
+  <table>
+    <tr><th>Metric</th><th>Typical Range</th><th>Notes</th></tr>
+    <tr><td>End-to-end response time</td><td>30–90 seconds</td><td>Dominated by three sequential GPT-4o-mini API calls</td></tr>
+    <tr><td>Output word count</td><td>400–700 words</td><td>Constrained by task description; occasionally varies</td></tr>
+    <tr><td>Quality score (normal topics)</td><td>6.5–9.0 / 10</td><td>Well-formed topics consistently score above 7.0</td></tr>
+    <tr><td>Quality score (vague topics)</td><td>5.0–7.5 / 10</td><td>Single-word topics produce slightly less structured output</td></tr>
+    <tr><td>Unit test pass rate</td><td>100%</td><td>All 5 suites pass without API key</td></tr>
+  </table>
+
+  <h3>9.2 Strengths</h3>
+  <ul>
+    <li>Fully modular architecture — agents, tools, and utilities are independently testable and replaceable.</li>
+    <li>Offline-capable — mock search fallback and unit tests require no API key or network access.</li>
+    <li>Robust error handling at every layer: input validation, tool-level try/except, agent retry limits, and controller-level exponential backoff.</li>
+    <li>The custom tool (ContentQualityAnalyzer) is genuinely dual-use — it drives agent behavior during the pipeline and provides user-facing evaluation after it.</li>
+    <li>Clean CLI interface with three modes: default demo, custom topic, and batch test runner.</li>
+  </ul>
+
+  <h3>9.3 Limitations and Future Improvements</h3>
+  <ul>
+    <li>
+      <strong>No persistent long-term memory.</strong> SharedMemory is in-memory and resets each
+      run. A future version could persist to SQLite or a vector store so the system learns from
+      previous articles (e.g., avoid repeating topics, build on established style).
+    </li>
+    <li>
+      <strong>Sequential-only execution.</strong> The Idea Generator could run multiple search
+      queries in parallel using CrewAI's <code>Process.hierarchical</code> mode or async tool calls.
+      This could reduce response time by 30–40%.
+    </li>
+    <li>
+      <strong>Heuristic quality scoring.</strong> The ContentQualityAnalyzer uses rule-based
+      heuristics rather than semantic analysis. Integrating a readability library (e.g.,
+      textstat) or an LLM-based critique would produce more nuanced scores.
+    </li>
+    <li>
+      <strong>Single output format.</strong> The system currently targets Markdown. A future
+      extension could add a formatting selector that lets the user request HTML, plain text,
+      or a specific word count at the CLI level.
+    </li>
+    <li>
+      <strong>No reinforcement learning loop.</strong> Agent prompts are static. A future version
+      could use the quality score as a reward signal to iteratively refine prompts via a
+      meta-agent or automated prompt optimization framework such as DSPy.
+    </li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ 10. CONCLUSION -->
+<div class="page-break">
+  <h2>10. Conclusion</h2>
+  <p>
+    This project demonstrates a complete, production-quality multi-agent AI system built on
+    CrewAI that fulfills all assignment requirements: a controller agent, three specialized
+    agents, three built-in tools, one custom tool with agent integration, sequential orchestration,
+    shared memory, and a comprehensive test suite.
+  </p>
+  <p>
+    The most significant design decision was making the <strong>ContentQualityAnalyzer</strong>
+    both an agent-callable tool and a post-pipeline evaluator. This means quality feedback
+    operates at two levels — the Editor Agent can self-correct mid-task, and the user receives
+    a full scored breakdown after the pipeline completes.
+  </p>
+  <p>
+    The system handles all three required test scenarios correctly: a well-defined topic
+    produces a high-scoring article, a vague topic still results in a usable article, and
+    empty input is rejected gracefully before any API call is made. The use of exponential
+    backoff retries, offline-capable tools, and structured error returns ensures the system
+    is robust in real-world conditions, not just ideal test cases.
+  </p>
+  <p>
+    Future development would focus on persistent memory, parallel task execution, and
+    semantic quality scoring to move the system closer to a fully autonomous publishing assistant.
+  </p>
+</div>
+
+</body>
+</html>

@@ -212,7 +212,9 @@ class ContentCreationController:
                 "4. Sharpen the opening hook to grab the reader in the first sentence.\n"
                 "5. Ensure the conclusion ends with a memorable statement or call-to-action.\n"
                 "6. Verify Markdown headings are correctly formatted.\n"
-                "7. Use the Output Formatter Tool to produce clean final Markdown.\n\n"
+                "7. Use the Content Quality Analyzer Tool to self-check your draft — "
+                "aim for a score of 8 or above before finalizing.\n"
+                "8. Use the Output Formatter Tool to produce clean final Markdown.\n\n"
                 "IMPORTANT: Return the COMPLETE edited article, not a summary."
             ),
             expected_output=(
